@@ -417,8 +417,8 @@ edited_df = st.data_editor(
     df_input,
     column_config={
         "月": st.column_config.NumberColumn("📅 月", format="%d月", min_value=1, max_value=12, disabled=True),
-        "契約電力(kW)": st.column_config.NumberColumn("⚡ 契約電力 (kW)", min_value=0, format="%.1f"),
-        "使用電力量(kWh)": st.column_config.NumberColumn("🔋 使用電力量 (kWh)", min_value=0, format="%d"),
+        "契約電力(kW)": st.column_config.NumberColumn("⚡ 契約電力 (kW)", min_value=0.1, max_value=10000, format="%.1f", required=True, default=50.0),
+        "使用電力量(kWh)": st.column_config.NumberColumn("🔋 使用電力量 (kWh)", min_value=1, max_value=10000000, format="%d", required=True, default=20000),
     },
     hide_index=True,
     num_rows="fixed",
