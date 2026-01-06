@@ -532,10 +532,43 @@ if run_button:
                 max_val = demand
                 max_idx = i
 
+        # ピーク値を目標に合わせる
         diff = target_peak - max_val
-        
         if abs(diff) > 0.000001:
             month_data[max_idx]['Demand_kW'] = target_peak
+        
+        # 合計値を目標に合わせる（ピーク以外の1時間だけ調整）
+        current_total = sum([d['Demand_kW'] for d in month_data])
+        total_diff = target_total - current_total
+        
+        if abs(total_diff) > 0.001:
+            # ピーク以外で、調整しても問題ない時間を1つ選ぶ
+            # （2番目に大きい値の時間を選ぶと目立ちにくい）
+            sorted_indices = sorted(
+                range(len(month_data)), 
+                key=lambda i: month_data[i]['Demand_kW'], 
+                reverse=True
+            )
+            
+            # ピーク以外の時間を探す
+            adjust_idx = None
+            for idx in sorted_indices:
+                if idx != max_idx:
+                    # この時間に差分を足しても、ピークを超えないか確認
+                    new_val = month_data[idx]['Demand_kW'] + total_diff
+                    if new_val >= 0 and new_val <= target_peak:
+                        adjust_idx = idx
+                        break
+            
+            # 見つからなければ、最も小さい値の時間を使う
+            if adjust_idx is None:
+                for idx in reversed(sorted_indices):
+                    if idx != max_idx:
+                        adjust_idx = idx
+                        break
+            
+            if adjust_idx is not None:
+                month_data[adjust_idx]['Demand_kW'] += total_diff
 
         final_data.extend(month_data)
 
@@ -544,6 +577,32 @@ if run_button:
     
     df_result = pd.DataFrame(final_data)
     df_result['Demand_kW'] = df_result['Demand_kW'].round(2)
+    
+    # 丸め後の合計差分を月ごとに再調整
+    df_result['month'] = df_result['datetime'].dt.month
+    
+    for month in range(1, 13):
+        target_total = targets[month]['total_kwh']
+        target_peak = targets[month]['peak_kw']
+        
+        month_mask = df_result['month'] == month
+        current_total = df_result.loc[month_mask, 'Demand_kW'].sum()
+        total_diff = target_total - current_total
+        
+        if abs(total_diff) >= 0.01:
+            # ピーク以外の時間を1つ選んで調整
+            month_data = df_result.loc[month_mask].copy()
+            max_idx = month_data['Demand_kW'].idxmax()
+            
+            # ピーク以外で調整可能な時間を探す
+            for idx in month_data.index:
+                if idx != max_idx:
+                    current_val = df_result.loc[idx, 'Demand_kW']
+                    new_val = round(current_val + total_diff, 2)
+                    # ピークを超えず、0以上なら調整
+                    if 0 <= new_val <= target_peak:
+                        df_result.loc[idx, 'Demand_kW'] = new_val
+                        break
 
     st.session_state.calculated_data = df_result
     st.success("計算が完了しました。")
@@ -557,9 +616,6 @@ if st.session_state.calculated_data is not None:
 
     st.markdown("---")
     st.markdown("## 計算結果")
-    
-    # month列を追加
-    df_result['month'] = df_result['datetime'].dt.month
     
     # 月別デマンド推移グラフ
     st.markdown("### 月別ピーク値")
