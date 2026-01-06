@@ -7,6 +7,128 @@ import os
 import altair as alt
 
 # ==========================================
+# ページ設定（最初に呼ぶ必要あり）
+# ==========================================
+st.set_page_config(
+    page_title="⚡ デマンド生成",
+    page_icon="⚡",
+    layout="centered",  # 1列レイアウト
+    initial_sidebar_state="collapsed"  # サイドバーを非表示
+)
+
+# ==========================================
+# カスタムCSS（かわいいデザイン）
+# ==========================================
+st.markdown("""
+<style>
+    /* 全体の背景 */
+    .stApp {
+        background: #ffffff;
+    }
+    
+    /* メインコンテンツエリア */
+    .main .block-container {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 2rem 3rem;
+        margin-top: 1rem;
+    }
+    
+    /* セクションカード */
+    .section-card {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        border-left: 5px solid #4CAF50;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* セクションタイトル */
+    .section-title {
+        font-size: 1.3rem;
+        font-weight: bold;
+        color: #4a5568;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    /* ボタンのスタイル */
+    .stButton > button {
+        background: linear-gradient(135deg, #00c853 0%, #64dd17 100%);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 0.75rem 2rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(0, 200, 83, 0.4);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 200, 83, 0.6);
+        background: linear-gradient(135deg, #00e676 0%, #76ff03 100%);
+    }
+    
+    /* データエディタのスタイル */
+    .stDataFrame {
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    
+    /* スライダーのスタイル */
+    .stSlider > div > div > div {
+        background: #4CAF50 !important;
+    }
+    
+    /* 成功メッセージ */
+    .stSuccess {
+        background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 100%);
+        border-radius: 10px;
+    }
+    
+    /* ヘッダー */
+    h1 {
+        text-align: center;
+        color: #2d3748;
+        font-size: 1.8rem !important;
+    }
+    
+    /* サブヘッダー */
+    h2 {
+        color: #4a5568;
+        font-size: 1.3rem !important;
+    }
+    
+    h3 {
+        color: #4a5568;
+        font-size: 1.1rem !important;
+    }
+    
+    /* 全体の文字サイズ調整 */
+    .stMarkdown p, .stMarkdown li {
+        font-size: 0.95rem;
+    }
+    
+    /* 説明テキスト */
+    .description {
+        color: #718096;
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+    
+    /* プログレスバー */
+    .stProgress > div > div > div {
+        background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
 # 定数・初期設定
 # ==========================================
 HOLIDAYS_2024 = [
@@ -19,50 +141,46 @@ HOLIDAYS_2024 = [
 
 # プリセットパターンの定義
 PRESET_PATTERNS = {
-    "標準（オフィス/日中型）": {
-        # 平日: 14時頃を最大ピーク（10）とし、前後をなだらかにする（ピークカットしやすく）
+    "🏢 標準（オフィス/日中型）": {
         "weekday": [2, 2, 2, 2, 2, 3, 5, 7, 8, 9, 9, 8, 7, 9, 10, 9, 8, 7, 6, 5, 4, 3, 2, 2],
         "holiday": [3]*24,
-        "holiday_ratio": 30 # 休日は平日の30%程度
+        "holiday_ratio": 30
     },
-    "工場（土日休み）": {
-        # 平日: 午前(10時)と午後(14時)にピークを作り、平坦な時間を減らす
+    "🏭 工場（土日休み）": {
         "weekday": [2, 2, 2, 2, 2, 3, 5, 8, 9, 10, 9, 9, 5, 9, 10, 9, 8, 6, 3, 2, 2, 2, 2, 2],
         "holiday": [2]*24,
-        "holiday_ratio": 15 # 待機電力のみ
+        "holiday_ratio": 15
     },
-    "工場（土日稼働）": {
-        # 平日・休日問わず、メリハリのある山を作る
+    "🏭 工場（土日稼働）": {
         "weekday": [3, 3, 3, 3, 3, 4, 6, 8, 9, 10, 9, 9, 6, 9, 10, 9, 8, 7, 5, 4, 3, 3, 3, 3],
         "holiday": [3, 3, 3, 3, 3, 4, 6, 8, 9, 10, 9, 9, 6, 9, 10, 9, 8, 7, 5, 4, 3, 3, 3, 3],
-        "holiday_ratio": 100 # 平日と同じ
+        "holiday_ratio": 100
     },
-    "スーパーマーケット": {
-        # 夕方17-18時頃に鋭いピークを作る（蓄電池効果が出やすい形状）
+    "🛒 スーパーマーケット": {
         "weekday": [4, 4, 4, 4, 4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 9, 9.5, 10, 9.5, 8, 7, 6, 5, 4, 4],
         "holiday": [4, 4, 4, 4, 4, 5, 7, 8, 9, 9, 9.5, 10, 9.5, 9, 9, 9.5, 10, 9, 8, 7, 6, 5, 4, 4],
-        "holiday_ratio": 100 # 休日もフル稼働
+        "holiday_ratio": 100
     },
-    "倉庫（日中のみ）": {
-        # 日中照明・空調のみ、メリハリは弱い
+    "📦 倉庫（日中のみ）": {
         "weekday": [1, 1, 1, 1, 1, 1, 2, 4, 8, 8, 8, 8, 6, 8, 8, 8, 8, 4, 2, 1, 1, 1, 1, 1],
         "holiday": [1]*24,
-        "holiday_ratio": 20 # 休日はほぼ稼働なし
+        "holiday_ratio": 20
     },
-    "コンビニ（24時間）": {
-        # 昼ピーク、深夜も一定ある
+    "🏪 コンビニ（24時間）": {
         "weekday": [4, 4, 4, 4, 5, 6, 7, 8, 9, 9, 9, 10, 10, 9, 9, 8, 8, 7, 6, 5, 5, 5, 4, 4],
         "holiday": [4, 4, 4, 4, 5, 6, 7, 8, 9, 9, 9, 10, 10, 9, 9, 8, 8, 7, 6, 5, 5, 5, 4, 4],
-        "holiday_ratio": 90 # 休日もほぼ同じ
+        "holiday_ratio": 90
     },
-    "ほぼフラット（気温連動風）": {
-        # ベースロードがメインで、日中わずかに山ができる（空調負荷など）。変動は緩やか。
+    "🌡️ ほぼフラット（気温連動風）": {
         "weekday": [6, 6, 6, 6, 6, 6, 7, 8, 9, 10, 10, 10, 10, 10, 9, 8, 7, 6, 6, 6, 6, 6, 6, 6],
         "holiday": [6, 6, 6, 6, 6, 6, 7, 8, 9, 10, 10, 10, 10, 10, 9, 8, 7, 6, 6, 6, 6, 6, 6, 6],
-        "holiday_ratio": 90 # 休日もほぼ変わらない
+        "holiday_ratio": 90
     }
 }
 
+# ==========================================
+# ユーティリティ関数
+# ==========================================
 def is_holiday(date_obj):
     """日付が休日（土日または祝日）か判定する"""
     if date_obj.weekday() >= 5:
@@ -73,9 +191,7 @@ def is_holiday(date_obj):
     return False
 
 def calculate_monthly_params(target_peak, target_total, patterns_in_month):
-    """
-    その月のPeakとTotalを満たす Base_Load(B) と Variable_Width(V) を計算する
-    """
+    """その月のPeakとTotalを満たす Base_Load(B) と Variable_Width(V) を計算する"""
     n_hours = len(patterns_in_month)
     sum_p = sum(patterns_in_month)
     max_p = max(patterns_in_month)
@@ -100,15 +216,9 @@ def normalize_to_percentage(raw_list):
     return [x / total * 100 for x in raw_list]
 
 def optimize_pattern_shape(target_peak, target_total, patterns_in_month, max_iter=20):
-    """
-    ターゲットのPeakとTotalを満たす解(B>=0, V>=0)が存在するように、
-    パターンの「鋭さ（ガンマ値）」を自動調整する。
-    B < 0 (Total不足) -> パターンを鋭くする (gamma > 1)
-    V < 0 (Total過多) -> パターンを平坦にする (gamma < 1)
-    """
+    """パターンの「鋭さ（ガンマ値）」を自動調整する"""
     current_patterns = np.array(patterns_in_month)
     
-    # 二分探索の範囲 (0.1 = 超平坦 〜 10.0 = 超鋭角)
     low = 0.1
     high = 10.0
     best_patterns = current_patterns
@@ -116,19 +226,14 @@ def optimize_pattern_shape(target_peak, target_total, patterns_in_month, max_ite
     best_v = 0
     min_error = float('inf')
 
-    # まず初期状態で計算
     b, v = calculate_monthly_params(target_peak, target_total, current_patterns)
     
-    # 既にOKならそのまま返す
     if b >= -0.001 and v >= -0.001:
         return current_patterns, b, v
 
-    # 探索ループ
     for _ in range(max_iter):
         mid = (low + high) / 2
         
-        # ガンマ補正 (x^gamma)
-        # 元の値が小さいと消えてしまうので、最大値で正規化してからべき乗し、戻す
         p_max = current_patterns.max()
         if p_max == 0: break
         
@@ -136,22 +241,13 @@ def optimize_pattern_shape(target_peak, target_total, patterns_in_month, max_ite
         
         b, v = calculate_monthly_params(target_peak, target_total, temp_patterns)
         
-        # 評価
-        # 我々が目指すのは B>=0 かつ V>=0
         if b < 0:
-            # Baseが負 = Totalが少なすぎる = パターンが平坦すぎる
-            # -> もっと鋭くする必要がある -> gammaを大きく
             low = mid
         elif v < 0:
-            # Variableが負 = Totalが多すぎる = パターンが鋭すぎる
-            # -> もっと平坦にする必要がある -> gammaを小さく
             high = mid
         else:
-            # 解が見つかった！
             return temp_patterns, b, v
             
-    # ループを抜けた場合（収束しなかった場合）、最もマシな（境界に近い）値を返す
-    # 最後にもう一度計算
     p_max = current_patterns.max()
     if p_max > 0:
         final_patterns = np.power(current_patterns / p_max, mid) * p_max
@@ -161,18 +257,14 @@ def optimize_pattern_shape(target_peak, target_total, patterns_in_month, max_ite
     return current_patterns, b, v
 
 # ==========================================
-# Streamlit UI構築
-# ==========================================
-st.set_page_config(page_title="電力デマンド生成シミュレーター", layout="wide")
-st.title("⚡ 電力デマンド生成シミュレーター")
-
 # セッションステートの初期化
+# ==========================================
 if 'calculated_data' not in st.session_state:
     st.session_state.calculated_data = None
 
-# パターンデータの初期化関数
-def set_pattern_data(preset_name="標準（オフィス/日中型）"):
-    data = PRESET_PATTERNS.get(preset_name, PRESET_PATTERNS["標準（オフィス/日中型）"])
+def set_pattern_data(preset_name):
+    key_name = preset_name
+    data = PRESET_PATTERNS.get(key_name, list(PRESET_PATTERNS.values())[0])
     
     hours = list(range(24))
     weekday_vals = normalize_to_percentage(data["weekday"])
@@ -184,100 +276,136 @@ def set_pattern_data(preset_name="標準（オフィス/日中型）"):
         'Holiday': holiday_vals
     })
     
-    # 休日の稼働率も更新
     st.session_state.holiday_ratio = data.get("holiday_ratio", 100)
 
-# 初回起動時の初期化
 if 'pattern_df' not in st.session_state:
     if 'holiday_ratio' not in st.session_state:
-        st.session_state.holiday_ratio = 30 # 初期値
-    set_pattern_data()
+        st.session_state.holiday_ratio = 30
+    set_pattern_data(list(PRESET_PATTERNS.keys())[0])
 
-# --- サイドバー: パターン設定 (視覚的操作) ---
-st.sidebar.header("1. 負荷パターン設定")
+# ==========================================
+# メインUI
+# ==========================================
+
+# ヘッダー
+st.markdown("# ⚡ デマンド生成")
+st.markdown("""
+<p style="text-align: center; color: #718096; font-size: 0.95rem;">
+    月別の契約電力と使用電力量から、時間ごとのデマンドデータを生成します
+</p>
+""", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ==========================================
+# STEP 1: 負荷パターン設定
+# ==========================================
+st.markdown("## STEP 1: 負荷パターン設定")
+
+st.markdown("""
+<div class="description">
+    業態を選択すると、対応する電力パターンが自動設定されます。
+</div>
+""", unsafe_allow_html=True)
 
 # プリセット選択
-preset_options = list(PRESET_PATTERNS.keys())
-selected_preset = st.sidebar.selectbox(
-    "業態プリセットを選択してください",
-    options=preset_options,
-    index=0,
-    key="preset_selector",
-    on_change=lambda: set_pattern_data(st.session_state.preset_selector)
-)
+col1, col2 = st.columns([2, 1])
 
-st.sidebar.markdown("---")
+with col1:
+    preset_options = list(PRESET_PATTERNS.keys())
+    selected_preset = st.selectbox(
+        "業態プリセット",
+        options=preset_options,
+        index=0,
+        key="preset_selector",
+        on_change=lambda: set_pattern_data(st.session_state.preset_selector),
+        label_visibility="collapsed"
+    )
 
-# 休日の稼働率スライダー
-st.sidebar.subheader("休日の電力レベル調整")
-holiday_ratio = st.sidebar.slider(
-    "平日ピークに対する休日の割合 (%)",
-    min_value=0,
-    max_value=120,
-    value=st.session_state.holiday_ratio,
-    step=5,
-    key="holiday_ratio_slider",
-    help="平日の一番高い電力を100としたとき、休日の電力レベルをどの程度にするか設定します。0にすると待機電力なしになります。"
-)
-# session_stateと同期（スライダー操作時）
-st.session_state.holiday_ratio = holiday_ratio
+with col2:
+    holiday_ratio = st.slider(
+        "休日の電力レベル (%)",
+        min_value=0,
+        max_value=120,
+        value=st.session_state.holiday_ratio,
+        step=5,
+        key="holiday_ratio_slider",
+        help="平日の一番高い電力を100としたとき、休日の電力レベルをどの程度にするか"
+    )
+    st.session_state.holiday_ratio = holiday_ratio
 
+# パターンのプレビューグラフ
+st.markdown("### パターンプレビュー")
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("##### 時間ごとの配分形状(%)")
-st.sidebar.caption("※ここでは「形状」を編集します。休日の高さ（絶対量）は上のスライダーで調整されます。")
-
-# 編集可能なデータフレーム
-edited_pattern_df = st.sidebar.data_editor(
-    st.session_state.pattern_df,
-    column_config={
-        "Hour": st.column_config.NumberColumn("時", min_value=0, max_value=23, disabled=True, format="%d時"),
-        "Weekday": st.column_config.NumberColumn("平日形状(%)", min_value=0.0, max_value=100.0, step=0.1, format="%.1f%%"),
-        "Holiday": st.column_config.NumberColumn("休日形状(%)", min_value=0.0, max_value=100.0, step=0.1, format="%.1f%%")
-    },
-    hide_index=True,
-    num_rows="fixed",
-    height=300
-)
-
-# 合計値の確認
-sum_weekday = edited_pattern_df['Weekday'].sum()
-sum_holiday = edited_pattern_df['Holiday'].sum()
-
-if abs(sum_weekday - 100.0) > 0.1:
-    st.sidebar.warning("平日の合計が100%になっていません（計算時に自動補正されます）")
-
-# グラフで可視化 (Altair)
-# ここでは視覚的に分かりやすくするため、休日の値にスライダーの係数を掛けて表示する
-df_preview = edited_pattern_df.copy()
+df_preview = st.session_state.pattern_df.copy()
 ratio_val = st.session_state.holiday_ratio / 100.0
-
-# 表示用にスケーリング（平日の最大値を基準に、休日の高さを調整）
-# 注: データフレームの値は「合計100%」なので、ピークの値は時間数による。
-# ここでは簡易的に、「入力された値」に対して係数をかけるだけでイメージを表示する。
 df_preview['Holiday'] = df_preview['Holiday'] * ratio_val
 
 pattern_long = df_preview.melt('Hour', var_name='Type', value_name='Value')
+pattern_long['Type'] = pattern_long['Type'].replace({'Weekday': '平日', 'Holiday': '休日'})
 
-# グラフタイトル
-chart = alt.Chart(pattern_long).mark_bar().encode(
-    x=alt.X('Hour:O', title='時間'),
-    y=alt.Y('Value', title='相対強度 (イメージ)'),
-    color=alt.Color('Type', title='区分', scale=alt.Scale(domain=['Weekday', 'Holiday'], range=['#1f77b4', '#ff7f0e'])),
-    xOffset=alt.XOffset('Type', sort=['Weekday', 'Holiday']),
-    tooltip=['Hour', 'Type', alt.Tooltip('Value', format='.1f')]
-).properties(height=220, title="時間別パターンプレビュー (高さ調整済)")
+chart = alt.Chart(pattern_long).mark_bar(
+    cornerRadiusTopLeft=3,
+    cornerRadiusTopRight=3
+).encode(
+    x=alt.X('Hour:O', title='時間', axis=alt.Axis(labelAngle=0)),
+    y=alt.Y('Value:Q', title='比率 (%)'),
+    color=alt.Color('Type:N', 
+                    title='区分',
+                    scale=alt.Scale(
+                        domain=['平日', '休日'],
+                        range=['#4CAF50', '#FF9800']
+                    )),
+    xOffset=alt.XOffset('Type:N', sort=['平日', '休日']),
+    tooltip=[
+        alt.Tooltip('Hour:O', title='時間'),
+        alt.Tooltip('Type:N', title='区分'),
+        alt.Tooltip('Value:Q', title='比率 (%)', format='.1f')
+    ]
+).properties(
+    height=250
+).configure_axis(
+    grid=True,
+    gridOpacity=0.3
+).configure_view(
+    strokeWidth=0
+)
 
-st.sidebar.altair_chart(chart, use_container_width=True)
+st.altair_chart(chart, use_container_width=True)
 
-# パターン配列の更新
-pattern_weekday_ratio = edited_pattern_df['Weekday'].tolist()
-pattern_holiday_ratio = edited_pattern_df['Holiday'].tolist()
+# 詳細設定（折りたたみ）
+with st.expander("詳細設定：時間別パターンの調整"):
+    st.markdown("各時間帯の配分を直接編集できます。合計は自動で100%に調整されます。")
+    
+    edited_pattern_df = st.data_editor(
+        st.session_state.pattern_df,
+        column_config={
+            "Hour": st.column_config.NumberColumn("時", min_value=0, max_value=23, disabled=True, format="%d時"),
+            "Weekday": st.column_config.NumberColumn("平日 (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.1f"),
+            "Holiday": st.column_config.NumberColumn("休日 (%)", min_value=0.0, max_value=100.0, step=0.1, format="%.1f")
+        },
+        hide_index=True,
+        num_rows="fixed",
+        height=400,
+        use_container_width=True
+    )
+    st.session_state.pattern_df = edited_pattern_df
 
+pattern_weekday_ratio = st.session_state.pattern_df['Weekday'].tolist()
+pattern_holiday_ratio = st.session_state.pattern_df['Holiday'].tolist()
 
-# --- メイン画面: データ入力 ---
-st.header("2. 月別ターゲット入力")
-st.markdown("各月の「契約電力(Peak)」と「使用電力量(Total)」を入力してください。")
+st.markdown("---")
+
+# ==========================================
+# STEP 2: ターゲット入力
+# ==========================================
+st.markdown("## STEP 2: 月別電力データ入力")
+
+st.markdown("""
+<div class="description">
+    各月の契約電力（ピーク値）と使用電力量（月間合計）を入力してください。
+</div>
+""", unsafe_allow_html=True)
 
 default_data = {
     "月": list(range(1, 13)),
@@ -289,28 +417,41 @@ df_input = pd.DataFrame(default_data)
 edited_df = st.data_editor(
     df_input,
     column_config={
-        "月": st.column_config.NumberColumn("月", format="%d月", min_value=1, max_value=12, disabled=True),
-        "契約電力(kW)": st.column_config.NumberColumn("契約電力 (kW)", min_value=0, format="%.1f"),
-        "使用電力量(kWh)": st.column_config.NumberColumn("使用電力量 (kWh)", min_value=0, format="%d"),
+        "月": st.column_config.NumberColumn("📅 月", format="%d月", min_value=1, max_value=12, disabled=True),
+        "契約電力(kW)": st.column_config.NumberColumn("⚡ 契約電力 (kW)", min_value=0, format="%.1f"),
+        "使用電力量(kWh)": st.column_config.NumberColumn("🔋 使用電力量 (kWh)", min_value=0, format="%d"),
     },
     hide_index=True,
-    num_rows="fixed"
+    num_rows="fixed",
+    use_container_width=True
 )
 
+st.markdown("---")
 
-# --- 計算実行 ---
-st.header("3. シミュレーション実行")
-st.caption("※目標のPeak/Totalに合わせるため、波形の鋭さを自動調整します（1点だけ突出するのを防ぎます）")
+# ==========================================
+# STEP 3: シミュレーション実行
+# ==========================================
+st.markdown("## STEP 3: シミュレーション実行")
 
-if st.button("計算実行", type="primary"):
+st.markdown("""
+<div class="description">
+    設定が完了したら、計算実行ボタンをクリックしてください。
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    run_button = st.button("計算実行", use_container_width=True)
+
+if run_button:
     year = 2024
     start_date = datetime.datetime(year, 1, 1, 0, 0)
     end_date = datetime.datetime(year, 12, 31, 23, 0)
     
-    # 1. 全期間の生成
     all_hours = pd.date_range(start=start_date, end=end_date, freq='h')
     
-    # 2. うるう日(2/29)を除外する
     is_leap_day = (all_hours.month == 2) & (all_hours.day == 29)
     all_hours = all_hours[~is_leap_day]
     
@@ -327,8 +468,8 @@ if st.button("計算実行", type="primary"):
         }
 
     progress_bar = st.progress(0)
+    status_text = st.empty()
     
-    # パターンの正規化 (最大値を1.0にする)
     def normalize_pattern_to_coefficient(ratio_list):
         max_val = max(ratio_list)
         if max_val == 0: return [0.0] * len(ratio_list)
@@ -337,12 +478,12 @@ if st.button("計算実行", type="primary"):
     p_weekday_coef = normalize_pattern_to_coefficient(pattern_weekday_ratio)
     p_holiday_coef = normalize_pattern_to_coefficient(pattern_holiday_ratio)
     
-    # 休日のパターン係数全体を下げる (スライダーの値を使用)
     h_ratio = st.session_state.holiday_ratio / 100.0
     p_holiday_coef = [x * h_ratio for x in p_holiday_coef]
 
     for month, group in df_temp.groupby('month'):
         progress_bar.progress(month / 12)
+        status_text.text(f"🔄 {month}月を計算中...")
         
         target = targets.get(month)
         target_peak = target['peak_kw']
@@ -358,11 +499,8 @@ if st.button("計算実行", type="primary"):
             else:
                 monthly_patterns.append(p_weekday_coef[hour])
         
-        # --- ここで自動形状補正を行う ---
-        # 単純に計算してB, Vが負になる場合、パターンを変形させて解を見つける
         optimized_patterns, b, v = optimize_pattern_shape(target_peak, target_total, monthly_patterns)
         
-        # 強制補正フラグ（最適化してもダメだった場合の安全策）
         force_adjust = False
         if v < 0:
             v = 0
@@ -394,57 +532,67 @@ if st.button("計算実行", type="primary"):
                 max_val = demand
                 max_idx = i
 
-        # --- ピーク強制一致ロジック（最終微調整） ---
         diff = target_peak - max_val
         
         if abs(diff) > 0.000001:
-            current_val = month_data[max_idx]['Demand_kW']
-            month_data[max_idx]['Demand_kW'] = target_peak
-            
-            # 差分を1点ではなく、月全体にうっすら分散させる（トータルを変えないため、ここでは微修正のみ）
-            # だが、ピークを合わせるとトータルがズレる...
-            # 形状最適化がうまくいっていればdiffはほぼゼロのはず。
-            # 念の為、他の点には触らずピークだけ合わせるとトータルが微小にズレるが、
-            # 1点スパイクよりはマシなので、ピーク点のみ修正する（ただし最適化後なので差は小さいはず）
-            pass 
-            # ↑最適化を入れたので、無理やりな1点修正は一旦OFFにして様子を見る。
-            # もしどうしてもピークぴったりにしたいなら、最後にスケーリングする手もあるが...
-            # ここでは「ピーク値」を優先して書き換える
             month_data[max_idx]['Demand_kW'] = target_peak
 
         final_data.extend(month_data)
 
+    progress_bar.progress(1.0)
+    status_text.empty()
+    
     df_result = pd.DataFrame(final_data)
     df_result['Demand_kW'] = df_result['Demand_kW'].round(2)
 
     st.session_state.calculated_data = df_result
-    st.success("計算が完了しました！")
+    st.success("計算が完了しました。")
 
-
-# --- 結果表示 (セッションステートから読み出し) ---
+# ==========================================
+# 結果表示
+# ==========================================
 if st.session_state.calculated_data is not None:
     df_result = st.session_state.calculated_data
-    year = 2024 # 固定
+    year = 2024
 
-    # 年間デマンド推移 (幅いっぱいに表示)
-    st.subheader("年間デマンド推移")
+    st.markdown("---")
+    st.markdown("## 計算結果")
     
-    # Altairで折れ線グラフを作成 (Streamlit標準のline_chartより高機能)
-    # データ点数が多すぎると重いので、描画用にダウンサンプリングするか、そのまま描画するか検討
-    # ここでは8760点ならギリギリいけるのでそのまま描画
-    chart_year = alt.Chart(df_result).mark_line(strokeWidth=1).encode(
-        x=alt.X('datetime:T', title='日時'),
-        y=alt.Y('Demand_kW:Q', title='デマンド値 (kW)'),
-        tooltip=['datetime', 'Demand_kW']
-    ).properties(
-        height=400
-    ).interactive() # ズーム・パン可能に
-    
-    st.altair_chart(chart_year, use_container_width=True)
-    
-    # 検証用
-    st.subheader("計算結果の検証 (月別)")
+    # month列を追加
     df_result['month'] = df_result['datetime'].dt.month
+    
+    # 月別デマンド推移グラフ
+    st.markdown("### 月別ピーク値")
+    
+    # 月ごとの集計データを作成
+    df_monthly = df_result.groupby('month').agg({
+        'Demand_kW': ['max', 'mean', 'sum']
+    }).reset_index()
+    df_monthly.columns = ['月', 'ピーク (kW)', '平均 (kW)', '合計 (kWh)']
+    df_monthly['月表示'] = df_monthly['月'].astype(str) + '月'
+    
+    chart_monthly = alt.Chart(df_monthly).mark_bar(
+        cornerRadiusTopLeft=5,
+        cornerRadiusTopRight=5,
+        color='#4CAF50'
+    ).encode(
+        x=alt.X('月表示:N', title='月', sort=list(df_monthly['月表示'])),
+        y=alt.Y('ピーク (kW):Q', title='ピーク (kW)'),
+        tooltip=[
+            alt.Tooltip('月表示:N', title='月'),
+            alt.Tooltip('ピーク (kW):Q', title='ピーク', format='.1f'),
+            alt.Tooltip('平均 (kW):Q', title='平均', format='.1f'),
+            alt.Tooltip('合計 (kWh):Q', title='合計', format=',.0f')
+        ]
+    ).properties(
+        height=300
+    )
+    
+    st.altair_chart(chart_monthly, use_container_width=True)
+    
+    # 検証テーブル
+    st.markdown("### 検証テーブル")
+    
     monthly_stats = df_result.groupby('month')['Demand_kW'].agg(['max', 'sum']).reset_index()
     monthly_stats.columns = ['月', '計算ピーク(kW)', '計算合計(kWh)']
     
@@ -452,15 +600,25 @@ if st.session_state.calculated_data is not None:
     validation_df['ピーク差分'] = validation_df['計算ピーク(kW)'] - validation_df['契約電力(kW)']
     validation_df['合計差分'] = validation_df['計算合計(kWh)'] - validation_df['使用電力量(kWh)']
     
-    st.dataframe(validation_df.style.format({
-        '計算ピーク(kW)': '{:.2f}', 
-        '計算合計(kWh)': '{:.0f}',
-        'ピーク差分': '{:.2f}',
-        '合計差分': '{:.0f}'
-    }))
+    # 月を日本語表記に
+    validation_df['月'] = validation_df['月'].astype(str) + '月'
+    
+    # 差分が小さいかどうかでスタイリング
+    st.dataframe(
+        validation_df.style.format({
+            '計算ピーク(kW)': '{:.2f}', 
+            '計算合計(kWh)': '{:.0f}',
+            'ピーク差分': '{:.2f}',
+            '合計差分': '{:.0f}'
+        }),
+        use_container_width=True,
+        hide_index=True
+    )
 
-    # --- ダウンロード ---
-    st.header("4. データダウンロード")
+    st.markdown("---")
+    
+    # ダウンロード
+    st.markdown("## データダウンロード")
     
     df_pivot = df_result.pivot(index='Date_obj', columns='Time', values='Demand_kW')
     df_pivot.index = df_pivot.index.map(lambda d: f"{d.month}/{d.day}")
@@ -472,20 +630,23 @@ if st.session_state.calculated_data is not None:
     
     csv = df_pivot.to_csv(encoding='utf-8-sig')
     
-    st.subheader("生成データのプレビュー (横持ち形式)")
-    st.dataframe(df_pivot.head())
+    with st.expander("データプレビュー"):
+        st.dataframe(df_pivot.head(10), use_container_width=True)
     
-    st.download_button(
-        label="CSVファイルをダウンロード (横持ち形式)",
-        data=csv,
-        file_name=f"demand_simulation_{year}_pivot.csv",
-        mime="text/csv"
-    )
-    
-    if st.button("プロジェクトフォルダに保存する"):
-        file_path = os.path.join(os.getcwd(), f"demand_simulation_{year}_pivot.csv")
-        try:
-            df_pivot.to_csv(file_path, encoding='utf-8-sig')
-            st.success(f"保存しました: {file_path}")
-        except PermissionError:
-            st.error(f"エラー: ファイル '{file_path}' は現在開かれているため保存できません。Excelなどを閉じてから再試行してください。")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.download_button(
+            label="CSVダウンロード",
+            data=csv,
+            file_name=f"demand_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+# フッター
+st.markdown("---")
+st.markdown("""
+<p style="text-align: center; color: #a0aec0; font-size: 0.9rem;">
+    © 2026 ONE'S ENERGY. All rights reserved.
+</p>
+""", unsafe_allow_html=True)
