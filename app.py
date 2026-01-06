@@ -174,7 +174,7 @@ PRESET_PATTERNS = {
     "🌡️ ほぼフラット（気温連動風）": {
         "weekday": [6, 6, 6, 6, 6, 6, 7, 8, 9, 10, 10, 10, 10, 10, 9, 8, 7, 6, 6, 6, 6, 6, 6, 6],
         "holiday": [6, 6, 6, 6, 6, 6, 7, 8, 9, 10, 10, 10, 10, 10, 9, 8, 7, 6, 6, 6, 6, 6, 6, 6],
-        "holiday_ratio": 90
+        "holiday_ratio": 100
     }
 }
 
@@ -329,7 +329,6 @@ with col2:
         max_value=120,
         value=st.session_state.holiday_ratio,
         step=5,
-        key="holiday_ratio_slider",
         help="平日の一番高い電力を100としたとき、休日の電力レベルをどの程度にするか"
     )
     st.session_state.holiday_ratio = holiday_ratio
@@ -653,19 +652,14 @@ if st.session_state.calculated_data is not None:
     monthly_stats.columns = ['月', '計算ピーク(kW)', '計算合計(kWh)']
     
     validation_df = pd.merge(edited_df, monthly_stats, left_on='月', right_on='月')
-    validation_df['ピーク差分'] = validation_df['計算ピーク(kW)'] - validation_df['契約電力(kW)']
-    validation_df['合計差分'] = validation_df['計算合計(kWh)'] - validation_df['使用電力量(kWh)']
     
     # 月を日本語表記に
     validation_df['月'] = validation_df['月'].astype(str) + '月'
     
-    # 差分が小さいかどうかでスタイリング
     st.dataframe(
         validation_df.style.format({
             '計算ピーク(kW)': '{:.2f}', 
-            '計算合計(kWh)': '{:.0f}',
-            'ピーク差分': '{:.2f}',
-            '合計差分': '{:.0f}'
+            '計算合計(kWh)': '{:.0f}'
         }),
         use_container_width=True,
         hide_index=True
